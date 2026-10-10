@@ -1818,15 +1818,6 @@ region = %s
 	}
 	// On macOS/Windows, leave containerUser empty to use the image default (moatuser)
 
-	// An arbitrary UID has no passwd entry in the image, so Docker defaults
-	// HOME to "/" and moat-init fails creating //.claude. Point HOME at the
-	// home the mounts and agent staging already target.
-	if needsCustomImage {
-		if env := containerHomeEnv(containerUser, containerHome, proxyEnv); env != "" {
-			proxyEnv = append(proxyEnv, env)
-		}
-	}
-
 	// Determine if container needs privileged mode (only for docker:dind)
 	var privileged bool
 	if dockerConfig != nil && dockerConfig.Privileged {
@@ -2595,23 +2586,6 @@ func resolveContainerHome(needsCustomImage bool, imageHome string) string {
 		return "/home/moatuser"
 	}
 	return imageHome
-}
-
-// containerHomeEnv returns a HOME=<containerHome> entry when the container
-// runs as an explicit non-root UID (Linux bind mode, workspace owner != 5000).
-// It returns "" when the image default user applies (containerUser ""), when
-// running as root (volume mode drops privileges itself), when containerHome is
-// unknown, or when the user already set HOME via moat.yaml env or -e.
-func containerHomeEnv(containerUser, containerHome string, env []string) string {
-	if containerUser == "" || containerUser == "0:0" || containerHome == "" {
-		return ""
-	}
-	for _, e := range env {
-		if strings.HasPrefix(e, "HOME=") {
-			return ""
-		}
-	}
-	return "HOME=" + containerHome
 }
 
 // claudeProjectsHostDir returns the host-side ~/.claude/projects/<dir> path to

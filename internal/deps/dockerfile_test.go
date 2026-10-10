@@ -2166,6 +2166,12 @@ func TestGenerateDockerfileHomeWritableForAnyUID(t *testing.T) {
 			if idx < 0 {
 				t.Fatalf("Dockerfile missing %q:\n%s", chmod, df)
 			}
+			// ~/.codex must exist in the image: otherwise Docker creates it as
+			// root when bind-mounting ~/.codex/sessions, and a non-moatuser UID
+			// cannot stage config.toml into it.
+			if !strings.Contains(df, "/home/moatuser/.codex") {
+				t.Errorf("Dockerfile does not pre-create /home/moatuser/.codex:\n%s", df)
+			}
 			// It must come after the last step that writes into the home as
 			// moatuser, or those files stay unwritable for other UIDs.
 			for _, marker := range []string{"claude-plugins.sh", "useradd"} {

@@ -16,7 +16,8 @@ import (
 // Dockerfile changes in a way no other tag input captures (the tag hashes
 // inputs, not the Dockerfile text). Bump it with such changes.
 //
-//	2: home made writable for arbitrary runtime UIDs (Linux bind mode).
+//	2: home made writable for arbitrary runtime UIDs (Linux bind mode), and
+//	   ~/.codex pre-created so the sessions bind mount does not create it as root.
 const dockerfileLayoutVersion = 2
 
 // ImageTag generates a deterministic image tag for a set of dependencies.
