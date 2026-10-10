@@ -4,6 +4,15 @@ Moat runs AI coding agents in isolated containers with credential injection, net
 
 Moat is pre-1.0. The CLI interface and `moat.yaml` schema may change between minor versions. Breaking changes are listed under **Breaking** headings below.
 
+## Unreleased
+
+Fixes Moat on Linux hosts where the workspace owner's UID is not 5000, which includes default WSL and Ubuntu installs, and fixes gVisor runs with no published ports having no network. Cached run images rebuild once.
+
+### Fixed
+
+- Fix runs failing in `moat-init` when the workspace owner's UID is not 5000 — previously, on Linux the container ran as the workspace owner's UID (1000 on a default WSL or Ubuntu install), which has no passwd entry in the image, so `HOME` was `/` and agent staging failed with `mkdir //.claude: permission denied`; files baked into the image as `moatuser`, such as the `0600` `~/.claude.json` written by plugin installation, could not be overwritten or have their mode set. Moat now sets `HOME=/home/moatuser` for these runs unless `HOME` is set in `moat.yaml` `env` or with `-e`, makes the image home writable by any UID as the last build step, and has `moat-init` replace a staged file it cannot change the mode of. ([#NNN](https://github.com/majorcontext/moat/pull/NNN))
+- Fix gVisor runs hanging with no network access — previously, on Linux a run with no published ports used Docker host networking, and a gVisor sandbox set up by a stock `runsc install` has no network interfaces in that mode, so the agent could not reach the Moat proxy and retried with no output. gVisor runs now use bridge networking and reach the proxy through Docker's host gateway; runs with the standard `runc` runtime are unchanged. ([#NNN](https://github.com/majorcontext/moat/pull/NNN))
+
 ## v0.8.2 — 2026-10-07
 
 Restores Codex 0.160.1 subscription startup and inference by supporting workspace routing discovery with Moat's synthetic account identity. Adds process-inspection tools to run images and rejects development builds that still embed the placeholder container entrypoint; cached run images rebuild once, and an already-running proxy needs `moat proxy restart` after upgrading.

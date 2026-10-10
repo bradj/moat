@@ -661,6 +661,16 @@ func formatHookCommand(cmd string) string {
 // would run the base image's command as root with none of the entrypoint's
 // setup — so this fails the build instead of emitting an entrypoint-less image.
 func writeEntrypoint(b *strings.Builder, opts *ImageSpec, dockerMode DockerMode, contextFiles map[string][]byte) error {
+	// On native Linux Docker the container runs as the workspace owner's UID
+	// (not 5000) so bind-mounted files keep host ownership. That UID has no
+	// passwd entry, so the home must be writable by any UID for moat-init to
+	// stage agent config there (see containerHomeEnv in internal/run). This
+	// runs last so it also covers files that user-space installs created as
+	// moatuser (e.g. the 0600 ~/.claude.json written by plugin installation).
+	// No root-context step writes under the home, so this works whether the
+	// build is currently root or moatuser.
+	b.WriteString("# Make home writable for arbitrary runtime UIDs (Linux bind mode)\n")
+	b.WriteString(fmt.Sprintf("RUN chmod -R a+rwX /home/%s\n\n", containerUser))
 	if opts.needsInit(dockerMode) {
 		goBin, err := entrypointBinary(runtime.GOARCH)
 		if err != nil {

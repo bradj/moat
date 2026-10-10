@@ -838,10 +838,11 @@ func (m *Manager) Create(ctx context.Context, opts Options) (resRun *Run, retErr
 		}
 
 		// Build proxy environment using synthetic hostnames on all runtimes.
-		// Host-network mode is used on Docker Linux when no ports need publishing.
-		// In that mode, the container shares the host loopback, so localhost
-		// must NOT be in NO_PROXY (otherwise it bypasses network.host enforcement).
-		isHostNet := m.defaultRuntime().SupportsHostNetwork() && (opts.Config == nil || len(opts.Config.Ports) == 0)
+		// Host-network mode is used on Docker Linux (without gVisor) when no ports
+		// need publishing. In that mode, the container shares the host loopback,
+		// so localhost must NOT be in NO_PROXY (otherwise it bypasses
+		// network.host enforcement).
+		isHostNet := m.useHostNetwork(len(ports) > 0)
 		proxyEnv = buildProxyEnv(regResp.AuthToken, regResp.ProxyPort, isHostNet)
 
 		// Advertise each serial device as an rfc2217:// URL. Control lines have
@@ -1817,6 +1818,15 @@ region = %s
 	}
 	// On macOS/Windows, leave containerUser empty to use the image default (moatuser)
 
+	// An arbitrary UID has no passwd entry in the image, so Docker defaults
+	// HOME to "/" and moat-init fails creating //.claude. Point HOME at the
+	// home the mounts and agent staging already target.
+	if needsCustomImage {
+		if env := containerHomeEnv(containerUser, containerHome, proxyEnv); env != "" {
+			proxyEnv = append(proxyEnv, env)
+		}
+	}
+
 	// Determine if container needs privileged mode (only for docker:dind)
 	var privileged bool
 	if dockerConfig != nil && dockerConfig.Privileged {
@@ -2585,6 +2595,23 @@ func resolveContainerHome(needsCustomImage bool, imageHome string) string {
 		return "/home/moatuser"
 	}
 	return imageHome
+}
+
+// containerHomeEnv returns a HOME=<containerHome> entry when the container
+// runs as an explicit non-root UID (Linux bind mode, workspace owner != 5000).
+// It returns "" when the image default user applies (containerUser ""), when
+// running as root (volume mode drops privileges itself), when containerHome is
+// unknown, or when the user already set HOME via moat.yaml env or -e.
+func containerHomeEnv(containerUser, containerHome string, env []string) string {
+	if containerUser == "" || containerUser == "0:0" || containerHome == "" {
+		return ""
+	}
+	for _, e := range env {
+		if strings.HasPrefix(e, "HOME=") {
+			return ""
+		}
+	}
+	return "HOME=" + containerHome
 }
 
 // claudeProjectsHostDir returns the host-side ~/.claude/projects/<dir> path to

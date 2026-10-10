@@ -2136,3 +2136,43 @@ func TestGenerateDockerfileClaudeCodeInstallsZstd(t *testing.T) {
 		t.Error("zstd should only be added for claude-code")
 	}
 }
+
+func TestGenerateDockerfileHomeWritableForAnyUID(t *testing.T) {
+	// On Linux bind mode the container runs as the workspace owner's UID, not
+	// moatuser, so the home must be made writable after every step that
+	// creates files there — including user-space installs like Claude plugins,
+	// which write a 0600 ~/.claude.json.
+	chmod := "RUN chmod -R a+rwX /home/moatuser"
+	tests := []struct {
+		name string
+		spec *ImageSpec
+	}{
+		{"with init entrypoint", &ImageSpec{InitProviders: []string{"claude"}}},
+		{"without init entrypoint", &ImageSpec{}},
+		{"with plugins", &ImageSpec{
+			ClaudeMarketplaces: []claude.MarketplaceConfig{{Name: "m", Source: "github", Repo: "o/r"}},
+			ClaudePlugins:      []string{"p@m"},
+			InitProviders:      []string{"claude"},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := GenerateDockerfile([]Dependency{{Name: "node", Version: "22"}, {Name: "claude-code"}}, tt.spec)
+			if err != nil {
+				t.Fatalf("GenerateDockerfile error: %v", err)
+			}
+			df := result.Dockerfile
+			idx := strings.Index(df, chmod)
+			if idx < 0 {
+				t.Fatalf("Dockerfile missing %q:\n%s", chmod, df)
+			}
+			// It must come after the last step that writes into the home as
+			// moatuser, or those files stay unwritable for other UIDs.
+			for _, marker := range []string{"claude-plugins.sh", "useradd"} {
+				if last := strings.LastIndex(df, marker); last > idx {
+					t.Errorf("%q appears after the chmod; home files it creates stay unwritable", marker)
+				}
+			}
+		})
+	}
+}

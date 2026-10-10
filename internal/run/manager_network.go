@@ -20,6 +20,7 @@ import (
 //  1. We have ports to publish (host mode doesn't support port publishing)
 //  2. We're on macOS/Windows (host mode not supported)
 //  3. We're using the Apple container runtime
+//  4. Containers run under gVisor (see useHostNetwork)
 //
 // We only use host mode when we need proxy access AND don't have ports to
 // publish on Linux.
@@ -28,7 +29,7 @@ func (m *Manager) resolveNetworkConfig(needsPorts, needsProxy bool, hostAddr str
 		return "", nil
 	}
 
-	if m.defaultRuntime().SupportsHostNetwork() && !needsPorts {
+	if m.useHostNetwork(needsPorts) {
 		// Docker on Linux without ports: use host network so container can reach 127.0.0.1
 		networkMode = "host"
 	} else {
@@ -62,6 +63,25 @@ func (m *Manager) resolveNetworkConfig(needsPorts, needsProxy bool, hostAddr str
 	synthHosts, _ := synthHostStrategy(m.defaultRuntime().Type(), goruntime.GOOS, hostAddr)
 	extraHosts = append(extraHosts, synthHosts...)
 	return networkMode, extraHosts
+}
+
+// useHostNetwork reports whether the container shares the host network
+// namespace. resolveNetworkConfig (network mode) and Create (NO_PROXY) must
+// agree, so both call this.
+//
+// gVisor is excluded: under Docker's --network=host a stock runsc sandbox has
+// no network interfaces at all, so the container cannot reach the proxy.
+// Bridge mode keeps gVisor's own netstack and reaches the proxy through the
+// host-gateway mapping.
+func (m *Manager) useHostNetwork(needsPorts bool) bool {
+	rt := m.defaultRuntime()
+	if needsPorts || !rt.SupportsHostNetwork() {
+		return false
+	}
+	if g, ok := rt.(interface{ UsesGVisor() bool }); ok && g.UsesGVisor() {
+		return false
+	}
+	return true
 }
 
 // serialBindAddr resolves the address serial listeners should bind to for a

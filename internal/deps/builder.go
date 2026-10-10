@@ -5,11 +5,19 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/majorcontext/moat/internal/initbin"
 	"github.com/majorcontext/moat/internal/providers/pi"
 )
+
+// dockerfileLayoutVersion invalidates cached images when the generated
+// Dockerfile changes in a way no other tag input captures (the tag hashes
+// inputs, not the Dockerfile text). Bump it with such changes.
+//
+//	2: home made writable for arbitrary runtime UIDs (Linux bind mode).
+const dockerfileLayoutVersion = 2
 
 // ImageTag generates a deterministic image tag for a set of dependencies.
 func ImageTag(deps []Dependency, opts *ImageSpec) string {
@@ -38,6 +46,7 @@ func ImageTag(deps []Dependency, opts *ImageSpec) string {
 	hashInput := strings.Join(sorted, ",")
 	// Base package changes must invalidate images even when dependencies stay the same.
 	hashInput += ",base-packages:" + strings.Join(baseAptPackages, ",")
+	hashInput += ",layout:" + strconv.Itoa(dockerfileLayoutVersion)
 	if opts.BaseImage != "" {
 		hashInput += ",base:" + opts.BaseImage
 	}

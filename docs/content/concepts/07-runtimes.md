@@ -42,9 +42,11 @@ Docker runtime supports two sandbox modes:
 
 On Linux, if gVisor is not installed, Moat returns an error with installation instructions. gVisor is available for Debian/Ubuntu via the official `gvisor.dev` package repository, and installation details are included in the error message itself.
 
+**Networking:** On Linux with `runc`, a run that publishes no ports uses Docker host networking. gVisor runs always use bridge networking: under host networking, a gVisor sandbox configured by a stock `runsc install` has no network interfaces. In bridge mode the container keeps its own network namespace, gVisor's network stack handles its traffic, and the container reaches the proxy through Docker's host gateway.
+
 ### Overriding sandbox mode
 
-The `--no-sandbox` flag (or `sandbox: false` in `moat.yaml`) disables the gVisor requirement on Linux, falling back to the standard `runc` runtime. This is useful in environments where gVisor is not installed, during development where gVisor overhead is undesirable, or when debugging runtime-specific issues.
+The `--no-sandbox` flag (or `sandbox: none` in `moat.yaml`) disables the gVisor requirement on Linux, falling back to the standard `runc` runtime. This is useful in environments where gVisor is not installed, during development where gVisor overhead is undesirable, or when debugging runtime-specific issues.
 
 On macOS and Windows, `--no-sandbox` has no effect since gVisor is unavailable in Docker Desktop and standard mode is already the default.
 

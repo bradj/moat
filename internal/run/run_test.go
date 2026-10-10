@@ -751,3 +751,25 @@ func TestBuildProxyEnv_LoopbackNotBypassed(t *testing.T) {
 		t.Errorf("NO_PROXY must NOT contain 127.0.0.1 in host-network mode, got %q", noProxy)
 	}
 }
+
+func TestContainerHomeEnv(t *testing.T) {
+	tests := []struct {
+		name, user, home string
+		env              []string
+		want             string
+	}{
+		{"workspace owner uid", "1000:1000", "/home/moatuser", nil, "HOME=/home/moatuser"},
+		{"image default user", "", "/home/moatuser", nil, ""},
+		{"volume mode root", "0:0", "/home/moatuser", nil, ""},
+		{"unknown home", "1000:1000", "", nil, ""},
+		{"user set HOME", "1000:1000", "/home/moatuser", []string{"FOO=1", "HOME=/tmp"}, ""},
+		{"HOMEBREW not HOME", "1000:1000", "/home/moatuser", []string{"HOMEBREW_PREFIX=/x"}, "HOME=/home/moatuser"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := containerHomeEnv(tt.user, tt.home, tt.env); got != tt.want {
+				t.Errorf("containerHomeEnv(%q, %q, %v) = %q, want %q", tt.user, tt.home, tt.env, got, tt.want)
+			}
+		})
+	}
+}
